@@ -117,10 +117,11 @@ def makeplot(filename,LineoutDir = None,Show_theory = None,DiffDir = None,specif
     xRange=list(f['AXIS/AXIS1'])
     xiRange=list(f['AXIS/AXIS2'])
     
+    
+    data = np.array(DATASET)
+    
     def plot(limit,lineout_position):  
         
-        data = np.array(DATASET)
-    
         datamin = limit[0]
         datamax = limit[1]
         colormap = 'viridis'
@@ -130,13 +131,13 @@ def makeplot(filename,LineoutDir = None,Show_theory = None,DiffDir = None,specif
         ###### If we need to take a derivative
         
         if(DiffDir == 'xi'):
-            data = NDiff(data,xRange[1] - xRange[0],xiRange[1] - xiRange[0],Ddir = 'column')
+            data_test = NDiff(data_test,xRange[1] - xRange[0],xiRange[1] - xiRange[0],Ddir = 'column')
         elif(DiffDir == 'r'):
-            data = NDiff(data,xRange[1] - xRange[0],xiRange[1] - xiRange[0],Ddir = 'row')
+            data_test = NDiff(data_test,xRange[1] - xRange[0],xiRange[1] - xiRange[0],Ddir = 'row')
              
         ######
         
-        data = data.transpose()
+        dataT = data.transpose()
 
         fig, ax1 = plt.subplots(figsize=(8,5))
         # Zoom in / zoom out the plot
@@ -145,7 +146,7 @@ def makeplot(filename,LineoutDir = None,Show_theory = None,DiffDir = None,specif
         
         ax1.set_title(figure_title)
 
-        cs1 = ax1.pcolormesh(xi,x,data,vmin=datamin,vmax=datamax,cmap=colormap)
+        cs1 = ax1.pcolormesh(xi,x,dataT,vmin=datamin,vmax=datamax,cmap=colormap)
        
         fig.colorbar(cs1, pad = 0.15)
         ax1.set_xlabel(label_bottom)
@@ -156,25 +157,25 @@ def makeplot(filename,LineoutDir = None,Show_theory = None,DiffDir = None,specif
         
         if(LineoutDir == 'longitudinal'):
             ax2 = ax1.twinx()
-            middle_index = int(data.shape[0]/2)+1
+            middle_index = int(dataT.shape[0]/2)+1
             lineout_index = int (middle_index + lineout_position * xCellsPerUnitLength)+1
-            lineout = data[lineout_index,:]
+            lineout = dataT[lineout_index,:]
             ax2.plot(xi, lineout, 'r')
             
             if(Show_theory == 'focus'):
                 # plot the 1/2 slope line (theoretical focusing force)
-                focusing_force_theory = -1/2 * lineout_position * np.ones(data.shape[1])
+                focusing_force_theory = -1/2 * lineout_position * np.ones(dataT.shape[1])
                 ax2.plot(xi,focusing_force_theory, 'r--',label='F = -1/2 r')
                 ax2.legend()
             
             
             ax2.set_ylim(lineoutAxisRange)
-            ax1.plot(xi, lineout_position*np.ones(data.shape[1]), 'b--') # Add a dashed line at the lineout position
+            ax1.plot(xi, lineout_position*np.ones(dataT.shape[1]), 'b--') # Add a dashed line at the lineout position
             ax2.tick_params('y', colors='r')
         elif(LineoutDir == 'transverse'):
             ax2 = ax1.twiny()
             lineout_index = int (lineout_position * zCellsPerUnitLength) 
-            lineout = data[:,lineout_index]
+            lineout = dataT[:,lineout_index]
             ax2.plot(lineout, x, 'r')
             
             if(Show_theory == 'focus'):
@@ -184,7 +185,7 @@ def makeplot(filename,LineoutDir = None,Show_theory = None,DiffDir = None,specif
                 ax2.legend()
             
             ax2.set_xlim(lineoutAxisRange)
-            ax1.plot(lineout_position*np.ones(data.shape[0]),x, 'b--')
+            ax1.plot(lineout_position*np.ones(dataT.shape[0]),x, 'b--')
             ax2.tick_params('x', colors='r')
       
         fig.tight_layout()
