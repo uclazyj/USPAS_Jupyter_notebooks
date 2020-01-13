@@ -1,13 +1,10 @@
-import os
-import shutil
 import h5py
 import numpy as np
 import matplotlib.pyplot as plt
-from ipywidgets import interact, interactive, IntSlider, Layout, interact_manual, FloatSlider, HBox, VBox, interactive_output
 
 import json
 from collections import OrderedDict
-from ipywidgets import interact_manual,fixed,Layout,interact, FloatSlider
+from ipywidgets import interact,FloatSlider
 import ipywidgets as widgets
 
 # Take numerical differentiation for a 2D numpy array
@@ -30,8 +27,8 @@ def NDiff(a,xLength,yLength,Ddir):
 with open('qpinput.json') as f:
     inputDeck = json.load(f,object_pairs_hook=OrderedDict)
 
-    xCellsTotal = 2 ** inputDeck['simulation']['indx'] 
-    zCellsTotal = 2 ** inputDeck['simulation']['indz']
+    xCellsTotal = 2 ** inputDeck['simulation']['indx'] - 1
+    zCellsTotal = 2 ** inputDeck['simulation']['indz'] - 1
     xMax = inputDeck['simulation']['box']['x'][1]
     xMin = inputDeck['simulation']['box']['x'][0]
     xLengthTotal = xMax - xMin
@@ -43,16 +40,13 @@ with open('qpinput.json') as f:
     xCellsPerUnitLength = xCellsTotal/xLengthTotal
     zCellsPerUnitLength = zCellsTotal/zLengthTotal
 
-    dt = inputDeck['simulation']['dt']
-    nbeams = inputDeck['simulation']['nbeams']
-    time = inputDeck['simulation']['time']
-    NtimeSteps = int(time/dt)
-    ndump2D = inputDeck['beam'][0]['diag'][1]['ndump']
-
 # Show_theory = 'focus'
 # DiffDir = 'r' or 'xi'
-def makeplot(filename,LineoutDir = None,Show_theory = None,DiffDir = None,specify_title = ''):
+
+def makeplot(fileNameList,scaleList = [1],LineoutDir = None,Show_theory = None,DiffDir = None,specify_title = ''):
     
+    # This is the first filename
+    filename = fileNameList[0]
     # Depending on what kind of data we are plotting, the best range of the colorbar and lineout is different
     
     if('Species' in filename):
@@ -74,12 +68,18 @@ def makeplot(filename,LineoutDir = None,Show_theory = None,DiffDir = None,specif
         lineoutRange = [zMin,zMax]
     elif(LineoutDir == 'longitudinal'):
         lineoutRange = [xMin /2 ,xMax /2]
-    
-    f=h5py.File(filename,'r')
-    k=list(f.keys()) # k = ['AXIS', 'charge_slice_xz']
+        
+    for i in range(len(fileNameList)):
+        f=h5py.File(fileNameList[i],'r')
+        k=list(f.keys()) # k = ['AXIS', 'charge_slice_xz']
+        DATASET = f[k[1]]
+        if(i == 0):
+            data = np.array(DATASET) * scaleList[0]
+        else:
+            data += np.array(DATASET) * scaleList[i]
 
     AXIS = f[k[0]] # AXIS is a group, which contains two datasets: AXIS1 and AXIS2
-    DATASET = f[k[1]] 
+     
 
     LONG_NAME = DATASET.attrs['LONG_NAME']
     UNITS = DATASET.attrs['UNITS']
@@ -117,36 +117,33 @@ def makeplot(filename,LineoutDir = None,Show_theory = None,DiffDir = None,specif
     xRange=list(f['AXIS/AXIS1'])
     xiRange=list(f['AXIS/AXIS2'])
     
+    x=np.linspace(xRange[0],xRange[1],data.shape[1])
+    xi=np.linspace(xiRange[0],xiRange[1],data.shape[0]) 
     
-    data = np.array(DATASET)
+    ##### If we need to take a derivative
+
+    if(DiffDir == 'xi'):
+        data = NDiff(data,xRange[1] - xRange[0],xiRange[1] - xiRange[0],Ddir = 'column')
+    elif(DiffDir == 'r'):
+        data = NDiff(data,xRange[1] - xRange[0],xiRange[1] - xiRange[0],Ddir = 'row')
+
+    #####
     
-    def plot(limit,lineout_position):  
-        
-        datamin = limit[0]
-        datamax = limit[1]
-        colormap = 'viridis'
-        x=np.linspace(xRange[0],xRange[1],data.shape[1])
-        xi=np.linspace(xiRange[0],xiRange[1],data.shape[0]) 
-        
-        ###### If we need to take a derivative
-        
-        if(DiffDir == 'xi'):
-            data_test = NDiff(data_test,xRange[1] - xRange[0],xiRange[1] - xiRange[0],Ddir = 'column')
-        elif(DiffDir == 'r'):
-            data_test = NDiff(data_test,xRange[1] - xRange[0],xiRange[1] - xiRange[0],Ddir = 'row')
-             
-        ######
-        
-        dataT = data.transpose()
+    dataT = data.transpose()
+    
+    colormap = 'viridis'
+    
+    def plot(colorBarRange,lineout_position):  
 
         fig, ax1 = plt.subplots(figsize=(8,5))
         # Zoom in / zoom out the plot
         ax1.axis([ xi.min(), xi.max(),x.min()/2, x.max()/2])
         ###
-        
-        ax1.set_title(figure_title)
 
-        cs1 = ax1.pcolormesh(xi,x,dataT,vmin=datamin,vmax=datamax,cmap=colormap)
+        ax1.set_title(figure_title)
+        
+
+        cs1 = ax1.pcolormesh(xi,x,dataT,vmin=colorBarRange[0],vmax=colorBarRange[1],cmap=colormap)
        
         fig.colorbar(cs1, pad = 0.15)
         ax1.set_xlabel(label_bottom)
@@ -157,8 +154,8 @@ def makeplot(filename,LineoutDir = None,Show_theory = None,DiffDir = None,specif
         
         if(LineoutDir == 'longitudinal'):
             ax2 = ax1.twinx()
-            middle_index = int(dataT.shape[0]/2)+1
-            lineout_index = int (middle_index + lineout_position * xCellsPerUnitLength)+1
+            middle_index = int(dataT.shape[0]/2)
+            lineout_index = int (middle_index + lineout_position * xCellsPerUnitLength)
             lineout = dataT[lineout_index,:]
             ax2.plot(xi, lineout, 'r')
             
@@ -193,7 +190,7 @@ def makeplot(filename,LineoutDir = None,Show_theory = None,DiffDir = None,specif
         return
    
     i1=interact(plot,
-                limit = widgets.FloatRangeSlider(value=colorBarDefaultRange,min=colorBarTotalRange[0],max=colorBarTotalRange[1],step=0.1,description='Colorbar:',continuous_update=False),
+                colorBarRange = widgets.FloatRangeSlider(value=colorBarDefaultRange,min=colorBarTotalRange[0],max=colorBarTotalRange[1],step=0.1,description='Colorbar:',continuous_update=False),
                 lineout_position = FloatSlider(min=lineoutRange[0],max=lineoutRange[1],step=0.05,description='lineout position:',continuous_update=False)
                )
     return
